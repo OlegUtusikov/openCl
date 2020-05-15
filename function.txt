@@ -1,0 +1,13 @@
+kernel void matrixMultiplication(global const float* first,
+                                 global const float* second,
+                                 global float* result,
+                                 global const int* firstSize,
+                                 global const int* secondSize,
+                                 global const int* thirdSize)
+{
+    int i = get_group_id(0) * LOCAL_GROUP_SIZE + get_local_id(0);
+    int j = get_group_id(1) * LOCAL_GROUP_SIZE + get_local_id(1);
+    for (size_t k = 0; k < (*secondSize); ++k) {
+        result[i * (*thirdSize) + j] += first[i * (*secondSize) + k] * second[k * (*thirdSize) + j];
+    }
+}
