@@ -1,6 +1,8 @@
 #include <cstdio>
 #include <CL/opencl.h>
 #include <cstdlib>
+#include <chrono>
+#include <cstring>
 #include <memory>
 
 struct WorkingParams {
@@ -34,7 +36,7 @@ void init(const std::shared_ptr<WorkingParams> &params) {
         return;
     }
 
-    for (int i = 0; i < platformsCount; ++i) {
+    for (size_t i = 0; i < platformsCount; ++i) {
         cl_platform_id currentPlatformId = platformIds[i];
 
         cl_uint devicesCount = 0;
@@ -101,7 +103,9 @@ void read_and_build(const std::shared_ptr<WorkingParams> &params) {
 
     printf("Program created!\n");
 
-    result = clBuildProgram(params->program, params->devicesCount, params->devices, ("-D LOCAL_GROUP_SIZE=" + std::to_string(params->local_work_size)).c_str(), nullptr, nullptr);
+    result = clBuildProgram(params->program, params->devicesCount, params->devices,
+                            ("-D LOCAL_GROUP_SIZE=" + std::to_string(params->local_work_size)).c_str(), nullptr,
+                            nullptr);
     if (result != CL_SUCCESS) {
         printf("Build program error: %d\n", result);
         char *errorBuf = static_cast<char *>(malloc(2048 * sizeof(char)));
@@ -113,25 +117,32 @@ void read_and_build(const std::shared_ptr<WorkingParams> &params) {
     printf("Program was built!\n");
 }
 
+inline size_t get_nearest_up(size_t current, size_t mode) {
+    return (current % mode != 0 ? mode * ((current / mode) + 1) : current);
+}
+
 int main() {
     std::shared_ptr<WorkingParams> params(new WorkingParams());
-    size_t firstShape = 4;
-    size_t secondShape = 5;
-    size_t thirdShape = 4;
     params->local_work_size = 2;
+    size_t firstShape = 8;
+    size_t secondShape = get_nearest_up(6, params->local_work_size);
+    size_t thirdShape = 8;
     if (firstShape % params->local_work_size != 0 ||
         thirdShape % params->local_work_size != 0) {
         printf("Incorrect local group size\n");
         return EXIT_FAILURE;
     }
 
-    size_t firstSize = firstShape * secondShape * sizeof(cl_float);
-    size_t secondSize = secondShape * thirdShape * sizeof(cl_float);
-    size_t resultSize = firstShape * thirdShape * sizeof(cl_float);
+    size_t firstSize = firstShape * secondShape * sizeof(float);
+    size_t secondSize = secondShape * thirdShape * sizeof(float);
+    size_t resultSize = firstShape * thirdShape * sizeof(float);
 
-    auto *firstMatrix = static_cast<cl_float *>(malloc(firstSize));
-    auto *secondMatrix = static_cast<cl_float *>(malloc(secondSize));
-    auto *resultMatrix = static_cast<cl_float *>(malloc(resultSize));
+    auto *firstMatrix = static_cast<float *>(malloc(firstSize));
+    std::memset(firstMatrix, 0, firstSize);
+    auto *secondMatrix = static_cast<float *>(malloc(secondSize));
+    std::memset(secondMatrix, 0, secondSize);
+    auto *resultMatrix = static_cast<float *>(malloc(resultSize));
+    std::memset(resultMatrix, 0, resultSize);
 
     printf("First matrix:\n");
     for (size_t i = 0; i < firstShape; ++i) {
@@ -147,20 +158,20 @@ int main() {
     }
 
     printf("Second matrix:\n");
-    for (size_t i = 0; i < secondShape; ++i) {
-        for (size_t j = 0; j < thirdShape; ++j) {
-            secondMatrix[i * thirdShape + j] = i;
-            if (j == 0) {
-                printf("%zu", i);
+    for (size_t j = 0; j < thirdShape; ++j) {
+        for (size_t i = 0; i < secondShape; ++i) {
+            secondMatrix[j * secondShape + i] = j;
+            if (i == 0) {
+                printf("%zu", j);
             } else {
-                printf(" %zu", i);
+                printf(" %zu", j);
             }
         }
         printf("\n");
     }
 
     cl_int result;
-    const char* funName = "matrixMultiplication";
+    const char *funName = "matrixMultiplication";
 
     init(params);
     create_context(params);
@@ -172,15 +183,18 @@ int main() {
     cl_mem secondBuffer = clCreateBuffer(params->context, CL_MEM_READ_ONLY, secondSize, nullptr, &result);
     cl_mem resultBuffer = clCreateBuffer(params->context, CL_MEM_READ_WRITE, resultSize, nullptr, &result);
 
-    cl_mem firstSizeBuffer = clCreateBuffer(params->context, CL_MEM_READ_ONLY, sizeof(cl_int), nullptr, &result);
-    cl_mem secondSizeBuffer = clCreateBuffer(params->context, CL_MEM_READ_ONLY, sizeof(cl_int), nullptr, &result);
-    cl_mem thirdSizeBuffer = clCreateBuffer(params->context, CL_MEM_READ_ONLY, sizeof(cl_int), nullptr, &result);
+    cl_mem firstSizeBuffer = clCreateBuffer(params->context, CL_MEM_READ_ONLY, sizeof(size_t), nullptr, &result);
+    cl_mem secondSizeBuffer = clCreateBuffer(params->context, CL_MEM_READ_ONLY, sizeof(size_t), nullptr, &result);
+    cl_mem thirdSizeBuffer = clCreateBuffer(params->context, CL_MEM_READ_ONLY, sizeof(size_t), nullptr, &result);
 
     clEnqueueWriteBuffer(params->commandQueue, firstBuffer, CL_TRUE, 0, firstSize, firstMatrix, 0, nullptr, nullptr);
     clEnqueueWriteBuffer(params->commandQueue, secondBuffer, CL_TRUE, 0, secondSize, secondMatrix, 0, nullptr, nullptr);
-    clEnqueueWriteBuffer(params->commandQueue, firstSizeBuffer, CL_TRUE, 0, sizeof(cl_int), &firstShape, 0, nullptr, nullptr);
-    clEnqueueWriteBuffer(params->commandQueue, secondSizeBuffer, CL_TRUE, 0, sizeof(cl_int), &secondShape, 0, nullptr, nullptr);
-    clEnqueueWriteBuffer(params->commandQueue, thirdSizeBuffer, CL_TRUE, 0, sizeof(cl_int), &thirdShape, 0, nullptr, nullptr);
+    clEnqueueWriteBuffer(params->commandQueue, firstSizeBuffer, CL_TRUE, 0, sizeof(size_t), &firstShape, 0, nullptr,
+                         nullptr);
+    clEnqueueWriteBuffer(params->commandQueue, secondSizeBuffer, CL_TRUE, 0, sizeof(size_t), &secondShape, 0, nullptr,
+                         nullptr);
+    clEnqueueWriteBuffer(params->commandQueue, thirdSizeBuffer, CL_TRUE, 0, sizeof(size_t), &thirdShape, 0, nullptr,
+                         nullptr);
 
     clSetKernelArg(params->kernel, 0, sizeof(cl_mem), &firstBuffer);
     clSetKernelArg(params->kernel, 1, sizeof(cl_mem), &secondBuffer);
@@ -193,9 +207,19 @@ int main() {
     size_t globalWorkSize[workDims] = {firstShape, thirdShape};
     size_t localWorkSize[workDims] = {params->local_work_size, params->local_work_size};
 
-    result = clEnqueueNDRangeKernel(params->commandQueue, params->kernel, workDims, nullptr, globalWorkSize, localWorkSize, 0, nullptr, nullptr);
+    std::chrono::time_point<std::chrono::high_resolution_clock> start, end;
+    start = std::chrono::high_resolution_clock::now();
+
+    result = clEnqueueNDRangeKernel(params->commandQueue, params->kernel, workDims, nullptr, globalWorkSize,
+                                    localWorkSize, 0, nullptr, nullptr);
+
     clFinish(params->commandQueue);
-    result = clEnqueueReadBuffer(params->commandQueue, resultBuffer, CL_TRUE, 0, resultSize, resultMatrix, 0, nullptr, nullptr);
+    end = std::chrono::high_resolution_clock::now();
+
+    int elapsed_seconds = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+
+    result = clEnqueueReadBuffer(params->commandQueue, resultBuffer, CL_TRUE, 0, resultSize, resultMatrix, 0, nullptr,
+                                 nullptr);
 
     for (size_t i = 0; i < firstShape; ++i) {
         for (size_t j = 0; j < thirdShape; ++j) {
@@ -203,6 +227,7 @@ int main() {
         }
         printf("\n");
     }
+    printf("Time: %d mc seconds.\n", elapsed_seconds);
 
     free(firstMatrix);
     free(secondMatrix);
