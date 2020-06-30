@@ -5,18 +5,18 @@
 #include <cstring>
 #include <memory>
 
-struct WorkingParams {
-    cl_uint devicesCount{0};
-    cl_device_id *devices{nullptr};
-    cl_context context{nullptr};
-    cl_device_id device{nullptr};
-    cl_command_queue commandQueue{nullptr};
-    cl_program program{nullptr};
-    cl_kernel kernel{nullptr};
-    size_t local_work_size{1};
+struct Environment {
+    cl_uint          devicesCount    { 0 };
+    cl_device_id*    devices         { nullptr };
+    cl_context       context         { nullptr };
+    cl_device_id     device          { nullptr };
+    cl_command_queue commandQueue    { nullptr };
+    cl_program       program         { nullptr };
+    cl_kernel        kernel          { nullptr };
+    size_t           local_work_size { 1 };
 };
 
-void init(const std::shared_ptr<WorkingParams> &params) {
+void init(const std::shared_ptr<Environment> &params) {
     cl_int result;
     cl_platform_id *platformIds;
     cl_uint platformsCount = 0;
@@ -46,7 +46,7 @@ void init(const std::shared_ptr<WorkingParams> &params) {
             continue;
         }
 
-        printf("Platform %d. GPU devices count: %d\n", (i + 1), devicesCount);
+        printf("Platform %lu. GPU devices count: %d\n", (i + 1), devicesCount);
         auto *devices = static_cast<cl_device_id *>(malloc(devicesCount * sizeof(cl_device_id)));
 
         result = clGetDeviceIDs(currentPlatformId, CL_DEVICE_TYPE_GPU, devicesCount, devices, nullptr);
@@ -62,7 +62,7 @@ void init(const std::shared_ptr<WorkingParams> &params) {
     free(platformIds);
 }
 
-void create_context(const std::shared_ptr<WorkingParams> &params) {
+void create_context(const std::shared_ptr<Environment> &params) {
     if (params->devicesCount == 0) {
         return;
     }
@@ -81,7 +81,7 @@ void create_context(const std::shared_ptr<WorkingParams> &params) {
     }
 }
 
-void read_and_build(const std::shared_ptr<WorkingParams> &params) {
+void read_and_build(const std::shared_ptr<Environment> &params) {
     cl_int result;
     FILE *f = fopen("function.txt", "rb");
     fseek(f, 0, SEEK_END);
@@ -122,11 +122,11 @@ inline size_t get_nearest_up(size_t current, size_t mode) {
 }
 
 int main() {
-    std::shared_ptr<WorkingParams> params(new WorkingParams());
-    params->local_work_size = 2;
-    size_t firstShape = 8;
-    size_t secondShape = get_nearest_up(6, params->local_work_size);
-    size_t thirdShape = 8;
+    std::shared_ptr<Environment> params(new Environment());
+    params->local_work_size = 4;
+    size_t firstShape = 1024;
+    size_t secondShape = get_nearest_up(1024, params->local_work_size);
+    size_t thirdShape = 1024;
     if (firstShape % params->local_work_size != 0 ||
         thirdShape % params->local_work_size != 0) {
         printf("Incorrect local group size\n");
