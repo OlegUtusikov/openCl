@@ -4,24 +4,24 @@
 #include <chrono>
 #include <omp.h>
 
-double* createMatrix(size_t shapeX, size_t shapeY) {
-    size_t len = sizeof(double) * shapeX * shapeY;
-    auto* res = static_cast<double*>(malloc(len));
+float* createMatrix(size_t shapeX, size_t shapeY) {
+    size_t len = sizeof(float) * shapeX * shapeY;
+    auto* res = static_cast<float*>(malloc(len));
     memset(res, 0, len);
     return res;
 }
 
-void randomMatrix(double* matrix, size_t shapeX, size_t shapeY) {
+void randomMatrix(float* matrix, size_t shapeX, size_t shapeY) {
     for(size_t i = 0; i < shapeX * shapeY; ++i) {
         matrix[i] = rand() % 100;
     }
 }
 
-void clearMatrix(double* matrix) {
+void clearMatrix(float* matrix) {
     free(matrix);
 }
 
-void transpose(const double* src, double* dst, size_t shapeX, size_t shapeY) {
+void transpose(const float* src, float* dst, size_t shapeX, size_t shapeY) {
     for(size_t i = 0; i < shapeX; ++i) {
         for(size_t j = 0; j < shapeY; ++j) {
             dst[j * shapeX + i] = src[i * shapeY + j];
@@ -29,27 +29,27 @@ void transpose(const double* src, double* dst, size_t shapeX, size_t shapeY) {
     }
 }
 
-void mulMatrixSeq(const double* firstMatrix, size_t shapeX1, size_t shapeY1,
-                  const double* secondMatrix, size_t shapeX2, size_t shapeY2, double* resultMatrix) {
+void mulMatrixSeq(const float* firstMatrix, size_t shapeX1, size_t shapeY1,
+                  const float* secondMatrix, size_t shapeX2, size_t shapeY2, float* resultMatrix) {
     for (int i = 0; i < shapeX1; ++i) {
         for (int j = 0; j < shapeY2; ++j) {
-            for (int k = 0; k < shapeY1; k++) {
+            for (int k = 0; k < shapeY1; ++k) {
                 resultMatrix[i * shapeY2 + j] += firstMatrix[i * shapeY1 + k] * secondMatrix[k * shapeY2 + j];
             }
         }
     }
 }
 
-void mulMatrix(const double* firstMatrix, size_t shapeX1, size_t shapeY1,
-               const double* secondMatrix, size_t shapeX2, size_t shapeY2, double* resultMatrix) {
+void mulMatrix(const float* firstMatrix, size_t shapeX1, size_t shapeY1,
+               const float* secondMatrix, size_t shapeX2, size_t shapeY2, float* resultMatrix) {
     #pragma omp parallel shared(firstMatrix, secondMatrix, resultMatrix)
     {
         int i, j, k;
         #pragma omp for schedule (static)
         for (i = 0; i < shapeX1; ++i) {
             for (j = 0; j < shapeY2; ++j) {
-                double sum = 0.0;
-                for (k = 0; k < shapeY1; k++) {
+                float sum;
+                for (k = 0; k < shapeY1; ++k) {
                     sum += firstMatrix[i * shapeY1 + k] * secondMatrix[j * shapeX2 + k];
                 }
                 resultMatrix[i * shapeY2 + j] = sum;
@@ -58,7 +58,7 @@ void mulMatrix(const double* firstMatrix, size_t shapeX1, size_t shapeY1,
     }
 }
 
-void printMatrix(const char* name, const double* matrix, size_t shapeX, size_t shapeY) {
+void printMatrix(const char* name, const float* matrix, size_t shapeX, size_t shapeY) {
     std::cout << "Matrix: " << name << std::endl;
     for (size_t i = 0; i < shapeX; ++i) {
         for (size_t j = 0; j < shapeY; ++j) {
@@ -81,14 +81,14 @@ int main(int argc, char** argv) {
         return 0;
     }
 
-    double* firstMatrix  = createMatrix(shapeX1, shapeY1);
-    double* secondMatrix = createMatrix(shapeX2, shapeY2);
-    double* resultMatrix = createMatrix(shapeX1, shapeY2);
+    float* firstMatrix  = createMatrix(shapeX1, shapeY1);
+    float* secondMatrix = createMatrix(shapeX2, shapeY2);
+    float* resultMatrix = createMatrix(shapeX1, shapeY2);
 
     randomMatrix(firstMatrix, shapeX1, shapeY1);
     randomMatrix(secondMatrix, shapeX2, shapeY2);
 
-    double* secondMatrixT = createMatrix(shapeX2, shapeY2);
+    float* secondMatrixT = createMatrix(shapeX2, shapeY2);
     transpose(secondMatrix, secondMatrixT, shapeX2, shapeY2);
 
     auto startSEQ = std::chrono::steady_clock::now();
@@ -103,7 +103,7 @@ int main(int argc, char** argv) {
 
     std::cout << "TimeSEQ: " << elapsedSEQ.count() << "mc (" << (elapsedSEQ.count() / 1000000.0) << " s)." << std::endl;
     std::cout << "TimeMP: " << elapsedMP.count() << "mc (" << (elapsedMP.count() / 1000000.0) << " s)." << std::endl;
-    std::cout << "Speed up :" << ((double)elapsedSEQ.count() / elapsedMP.count()) << std::endl;
+    std::cout << "Speed up :" << ((float)elapsedSEQ.count() / elapsedMP.count()) << std::endl;
 
     //printMatrix("result", resultMatrix, shapeX1, shapeY2);
 

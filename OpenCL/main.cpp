@@ -6,6 +6,15 @@
 #include <memory>
 
 struct Environment {
+    Environment() = default;
+    ~Environment() {
+        if (devices != nullptr)      free(devices);
+        if (context != nullptr)      free(context);
+        if (commandQueue != nullptr) free(commandQueue);
+        if (program != nullptr)      free(program);
+        if (kernel != nullptr)       free(kernel);
+    }
+
     cl_uint          devicesCount    { 0 };
     cl_device_id*    devices         { nullptr };
     cl_context       context         { nullptr };
@@ -18,46 +27,50 @@ struct Environment {
 
 void init(const std::shared_ptr<Environment> &params) {
     cl_int result;
-    cl_platform_id *platformIds;
     cl_uint platformsCount = 0;
 
     result = clGetPlatformIDs(0, nullptr, &platformsCount);
     if (result != CL_SUCCESS) {
-        printf("Obtain platforms count error! Error code: %d", result);
+        printf("Can't get platforms count! Error code: %d", result);
         return;
     }
-
     printf("Platforms count: %d\n", platformsCount);
-    platformIds = (cl_platform_id *) malloc(platformsCount * sizeof(cl_platform_id));
+
+    auto* platformIds = static_cast<cl_platform_id*>(malloc(platformsCount * sizeof(cl_platform_id)));
 
     result = clGetPlatformIDs(platformsCount, platformIds, nullptr);
     if (result != CL_SUCCESS) {
-        printf("Obtain platforms error! Error code: %d", result);
+        printf("Can't get platforms! Error code: %d", result);
         return;
     }
-
-    for (size_t i = 0; i < platformsCount; ++i) {
-        cl_platform_id currentPlatformId = platformIds[i];
-
-        cl_uint devicesCount = 0;
-        result = clGetDeviceIDs(currentPlatformId, CL_DEVICE_TYPE_GPU, 0, nullptr, &devicesCount);
-        if (result != CL_SUCCESS || devicesCount == 0) {
-            printf("Get devices count! Error code: %d\n", result);
-            continue;
+    const auto chooseDevices = [platformsCount, platformIds](const std::shared_ptr<Environment> &params, int device_type) {
+        cl_int result = CL_DEVICE_NOT_FOUND;
+        for (size_t i = 0; i < platformsCount; ++i) {
+            cl_uint devicesCount = 0;
+            result = clGetDeviceIDs(platformIds[i], device_type, 0, nullptr, &devicesCount);
+            if (result != CL_SUCCESS || devicesCount == 0) {
+                printf("Can't get devices! Error code: %d\n", result);
+                continue;
+            }
+            auto* devices = static_cast<cl_device_id*>(malloc(devicesCount * sizeof(cl_device_id)));
+            result = clGetDeviceIDs(platformIds[i], device_type, devicesCount, devices, nullptr);
+            if (result != CL_SUCCESS) {
+                printf("Can't get devices list! Error code: %d\n", result);
+                continue;
+            }
+            params->devices = devices;
+            params->devicesCount = devicesCount;
+            printf("Found devices!\n");
+            break;
         }
+        return result;
+    };
 
-        printf("Platform %lu. GPU devices count: %d\n", (i + 1), devicesCount);
-        auto *devices = static_cast<cl_device_id *>(malloc(devicesCount * sizeof(cl_device_id)));
-
-        result = clGetDeviceIDs(currentPlatformId, CL_DEVICE_TYPE_GPU, devicesCount, devices, nullptr);
-        if (result != CL_SUCCESS) {
-            printf("Get devices error! Error code: %d\n", result);
-            continue;
-        }
-        params->devices = devices;
-        params->devicesCount = devicesCount;
-        printf("Found suitable devices!\n");
-        break;
+    if (chooseDevices(params, CL_DEVICE_TYPE_GPU) != CL_SUCCESS) {
+        chooseDevices(params, CL_DEVICE_TYPE_CPU);
+        printf("CPU devices. Count = %d\n", params->devicesCount);
+    } else {
+        printf("GPU devices. Count = %d\n", params->devicesCount);
     }
     free(platformIds);
 }
@@ -70,46 +83,43 @@ void create_context(const std::shared_ptr<Environment> &params) {
     cl_int result;
     params->context = clCreateContext(nullptr, params->devicesCount, params->devices, nullptr, nullptr, &result);
     if (params->context == nullptr || result != CL_SUCCESS) {
-        printf("Creating context error! Error code: %d\n", result);
+        printf("Can't create context! Error code: %d\n", result);
         return;
     }
 
     params->commandQueue = clCreateCommandQueueWithProperties(params->context, params->devices[0], nullptr, &result);
     if (result == CL_SUCCESS && params->commandQueue != nullptr) {
         params->device = params->devices[0];
-        printf("Create working command queue!\n");
+        printf("Command queue created!\n");
     }
 }
 
-void read_and_build(const std::shared_ptr<Environment> &params) {
+void read_and_build(const char* filename, const std::shared_ptr<Environment> &params) {
     cl_int result;
-    FILE *f = fopen("function.txt", "rb");
+    FILE* f = fopen(filename, "rb");
     fseek(f, 0, SEEK_END);
     size_t fileSize = ftell(f);
     fseek(f, 0, SEEK_SET);
 
-    char *code = static_cast<char *>(malloc(fileSize * sizeof(char)));
+    char* code = static_cast<char*>(malloc(fileSize * sizeof(char)));
     fread(code, 1, fileSize, f);
 
-    params->program = clCreateProgramWithSource(params->context, 1, const_cast<const char **>(&code), &fileSize,
-                                                &result);
+    params->program = clCreateProgramWithSource(params->context, 1, const_cast<const char**>(&code), &fileSize, &result);
     if (result != CL_SUCCESS) {
-        printf("Create program from source error: %d\n", result);
+        printf("Can't create program from source. Error: %d\n", result);
         return;
     }
 
     fclose(f);
     free(code);
 
-    printf("Program created!\n");
-
     result = clBuildProgram(params->program, params->devicesCount, params->devices,
                             ("-D LOCAL_GROUP_SIZE=" + std::to_string(params->local_work_size)).c_str(), nullptr,
                             nullptr);
     if (result != CL_SUCCESS) {
-        printf("Build program error: %d\n", result);
-        char *errorBuf = static_cast<char *>(malloc(2048 * sizeof(char)));
-        clGetProgramBuildInfo(params->program, params->device, CL_PROGRAM_BUILD_LOG, 2048, errorBuf, nullptr);
+        printf("Can't build program. Error: %d\n", result);
+        char* errorBuf = static_cast<char*>(malloc(1024 * sizeof(char)));
+        clGetProgramBuildInfo(params->program, params->device, CL_PROGRAM_BUILD_LOG, 1024, errorBuf, nullptr);
         printf("%s", errorBuf);
         free(errorBuf);
         return;
@@ -118,67 +128,89 @@ void read_and_build(const std::shared_ptr<Environment> &params) {
 }
 
 inline size_t get_nearest_up(size_t current, size_t mode) {
-    return (current % mode != 0 ? mode * ((current / mode) + 1) : current);
+    return current % mode != 0 ? mode * (1 + current / mode) : current;
+}
+
+float* alloc_matrix(size_t size) {
+    auto* res = static_cast<float*>(malloc(size));
+    std::memset(res, 0, size);
+    return res;
+}
+
+void clear_matrix(float* matrix) {
+    free(matrix);
+}
+
+void init_random_matrix(float* matrix, size_t firstShape, size_t secondShape, size_t cols) {
+    if (cols < secondShape) return;
+    for (size_t i = 0; i < firstShape; ++i) {
+        for (size_t j = 0; j < secondShape; ++j) {
+            matrix[i * cols + j] = i * cols + j;
+        }
+    }
+}
+
+void transpose(const float* src, float* dst, size_t shapeX, size_t shapeY) {
+    for(size_t i = 0; i < shapeX; ++i) {
+        for(size_t j = 0; j < shapeY; ++j) {
+            dst[j * shapeX + i] = src[i * shapeY + j];
+        }
+    }
+}
+
+void printMatrix(const char* name, const float* matrix, size_t shapeX, size_t shapeY, size_t cols) {
+    if (cols < shapeY) {
+        printf("Bad dims. Allowed: %zu. Actual: %zu", cols, shapeY);
+        return;
+    }
+    printf("Matrix: %s\n", name);
+    for (size_t i = 0; i < shapeX; ++i) {
+        for (size_t j = 0; j < shapeY; ++j) {
+            printf("%f ", matrix[i * cols + j]);
+        }
+        printf("\n");
+    }
+}
+
+size_t gcd (size_t first, size_t second) {
+    return second > 0 ? gcd(second, first % second) : first;
+}
+
+size_t lcm(size_t first, size_t second) {
+    return (first * second) / gcd (first, second);
 }
 
 int main() {
+    size_t A = 3;
+    size_t B = 5;
+    size_t C = 6;
     std::shared_ptr<Environment> params(new Environment());
     params->local_work_size = 4;
-    size_t firstShape = 1024;
-    size_t secondShape = get_nearest_up(1024, params->local_work_size);
-    size_t thirdShape = 1024;
-    if (firstShape % params->local_work_size != 0 ||
-        thirdShape % params->local_work_size != 0) {
-        printf("Incorrect local group size\n");
-        return EXIT_FAILURE;
-    }
+    size_t firstShape  = get_nearest_up(A, params->local_work_size);
+    size_t secondShape = get_nearest_up(B, params->local_work_size);
+    size_t thirdShape  = get_nearest_up(C, params->local_work_size);
 
-    size_t firstSize = firstShape * secondShape * sizeof(float);
-    size_t secondSize = secondShape * thirdShape * sizeof(float);
-    size_t resultSize = firstShape * thirdShape * sizeof(float);
+    size_t firstSize  = firstShape  * secondShape * sizeof(float);
+    size_t secondSize = secondShape * thirdShape  * sizeof(float);
+    size_t resultSize = firstShape  * thirdShape  * sizeof(float);
 
-    auto *firstMatrix = static_cast<float *>(malloc(firstSize));
-    std::memset(firstMatrix, 0, firstSize);
-    auto *secondMatrix = static_cast<float *>(malloc(secondSize));
-    std::memset(secondMatrix, 0, secondSize);
-    auto *resultMatrix = static_cast<float *>(malloc(resultSize));
-    std::memset(resultMatrix, 0, resultSize);
+    auto* firstMatrix   = alloc_matrix(firstSize);
+    auto* secondMatrix  = alloc_matrix(secondSize);
+    auto* secondMatrixT = alloc_matrix(secondSize);
+    auto* resultMatrix  = alloc_matrix(resultSize);
 
-    printf("First matrix:\n");
-    for (size_t i = 0; i < firstShape; ++i) {
-        for (size_t j = 0; j < secondShape; ++j) {
-            firstMatrix[i * secondShape + j] = i;
-            if (j == 0) {
-                printf("%zu", i);
-            } else {
-                printf(" %zu", i);
-            }
-        }
-        printf("\n");
-    }
-
-    printf("Second matrix:\n");
-    for (size_t j = 0; j < thirdShape; ++j) {
-        for (size_t i = 0; i < secondShape; ++i) {
-            secondMatrix[j * secondShape + i] = j;
-            if (i == 0) {
-                printf("%zu", j);
-            } else {
-                printf(" %zu", j);
-            }
-        }
-        printf("\n");
-    }
-
-    cl_int result;
-    const char *funName = "matrixMultiplication";
+    init_random_matrix(firstMatrix, A, B, secondShape);
+    init_random_matrix(secondMatrix, B, C, thirdShape);
+    transpose(secondMatrix, secondMatrixT, secondShape, thirdShape);
 
     init(params);
     create_context(params);
-    read_and_build(params);
+    read_and_build("function.txt", params);
 
-    params->kernel = clCreateKernel(params->program, funName, nullptr);
+    params->kernel = clCreateKernel(params->program, "matrix_mul", nullptr);
 
+    // set arguments
+    cl_int result;
     cl_mem firstBuffer = clCreateBuffer(params->context, CL_MEM_READ_ONLY, firstSize, nullptr, &result);
     cl_mem secondBuffer = clCreateBuffer(params->context, CL_MEM_READ_ONLY, secondSize, nullptr, &result);
     cl_mem resultBuffer = clCreateBuffer(params->context, CL_MEM_READ_WRITE, resultSize, nullptr, &result);
@@ -188,7 +220,7 @@ int main() {
     cl_mem thirdSizeBuffer = clCreateBuffer(params->context, CL_MEM_READ_ONLY, sizeof(size_t), nullptr, &result);
 
     clEnqueueWriteBuffer(params->commandQueue, firstBuffer, CL_TRUE, 0, firstSize, firstMatrix, 0, nullptr, nullptr);
-    clEnqueueWriteBuffer(params->commandQueue, secondBuffer, CL_TRUE, 0, secondSize, secondMatrix, 0, nullptr, nullptr);
+    clEnqueueWriteBuffer(params->commandQueue, secondBuffer, CL_TRUE, 0, secondSize, secondMatrixT, 0, nullptr, nullptr);
     clEnqueueWriteBuffer(params->commandQueue, firstSizeBuffer, CL_TRUE, 0, sizeof(size_t), &firstShape, 0, nullptr,
                          nullptr);
     clEnqueueWriteBuffer(params->commandQueue, secondSizeBuffer, CL_TRUE, 0, sizeof(size_t), &secondShape, 0, nullptr,
@@ -203,6 +235,7 @@ int main() {
     clSetKernelArg(params->kernel, 4, sizeof(cl_mem), &secondSizeBuffer);
     clSetKernelArg(params->kernel, 5, sizeof(cl_mem), &thirdSizeBuffer);
 
+    // execution
     constexpr size_t workDims = 2;
     size_t globalWorkSize[workDims] = {firstShape, thirdShape};
     size_t localWorkSize[workDims] = {params->local_work_size, params->local_work_size};
@@ -221,16 +254,14 @@ int main() {
     result = clEnqueueReadBuffer(params->commandQueue, resultBuffer, CL_TRUE, 0, resultSize, resultMatrix, 0, nullptr,
                                  nullptr);
 
-    for (size_t i = 0; i < firstShape; ++i) {
-        for (size_t j = 0; j < thirdShape; ++j) {
-            printf("%.3f ", resultMatrix[i * thirdShape + j]);
-        }
-        printf("\n");
-    }
-    printf("Time: %d mc seconds.\n", elapsed_seconds);
-
-    free(firstMatrix);
-    free(secondMatrix);
-    free(resultMatrix);
+    printf("Time: %d mc seconds (%f seconds)\n", elapsed_seconds, elapsed_seconds / 1000000.0);
+    printMatrix("first", firstMatrix, A, B, secondShape);
+    printMatrix("second", secondMatrix, B, C, thirdShape);
+    printMatrix("secondT", secondMatrixT, C, B, secondShape);
+    printMatrix("result", resultMatrix, A, C, thirdShape);
+    clear_matrix(firstMatrix);
+    clear_matrix(secondMatrix);
+    clear_matrix(secondMatrixT);
+    clear_matrix(resultMatrix);
     return EXIT_SUCCESS;
 }

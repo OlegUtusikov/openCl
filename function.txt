@@ -1,4 +1,4 @@
-kernel void matrixMultiplication(global const float* first,
+kernel void matrix_mul(global const float* first,
                                  global const float* second,
                                  global float* result,
                                  global const int* firstSizeP,
