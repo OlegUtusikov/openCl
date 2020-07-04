@@ -21,7 +21,7 @@ struct Environment {
     cl_kernel           kernel              { nullptr };
     size_t              local_work_size     { 1 };
     size_t              elements_one_thread { 1 };
-    size_t              max_local_size_mem  { 128 };
+    size_t              max_local_size_mem  { 2048 };
     cl_queue_properties queue_props         { CL_QUEUE_PROFILING_ENABLE };
 };
 

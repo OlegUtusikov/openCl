@@ -4,16 +4,27 @@
 #include <cstring>
 #include "../utils.h"
 
-void init_rand_array(int* array, size_t size) {
+void init_rand_array(float* array, size_t size) {
     for (size_t i = 0; i < size; ++i) {
-        array[i] = 1 % 100;
+        array[i] = rand() % 100;
     }
 }
 
-void print_array(const char* prefix, int* array, size_t size) {
+bool check(const float* array, const float* elements, size_t size) {
+    float sum = 0.0;
+    for (size_t i = 0; i < size; ++i) {
+        sum += elements[i];
+        if (sum != array[i]) {
+            printf("Error: Expected: %f. Actual: %f.\n", sum, array[i]);
+            return false;
+        }
+    }
+    return true;
+}
+void print_array(const char* prefix, float* array, size_t size) {
     printf("%s\n", prefix);
     for (size_t i = 0; i < size; ++i) {
-        printf("%d ", array[i]);
+        printf("%f ", array[i]);
     }
     printf("\n");
 }
@@ -21,13 +32,11 @@ void print_array(const char* prefix, int* array, size_t size) {
 int main() {
     srand(time(nullptr));
     std::shared_ptr<Environment> params(new Environment());
-    size_t n = 20;
-    params->local_work_size = n;
-    size_t cnt = get_nearest_up(n, params->local_work_size);
-    printf("SIZE: %zu\n", cnt);
-    int* array  = alloc_array<int>(cnt);
+    size_t cnt = 256;
+    params->local_work_size = cnt;
+    auto* array  = alloc_array<float>(cnt);
     init_rand_array(array, cnt);
-    int* result_array = alloc_array<int>(cnt);
+    auto* result_array = alloc_array<float>(cnt);
 
     init(params);
     create_context(params);
@@ -38,10 +47,10 @@ int main() {
 
     params->kernel = clCreateKernel(params->program, "prefix_sum", nullptr);
 
-    size_t size = cnt * sizeof(int);
+    size_t size = cnt * sizeof(float);
     // set arguments
     cl_int result;
-    cl_mem arrayBuffer = clCreateBuffer(params->context, CL_MEM_READ_ONLY, size, nullptr, &result);
+    cl_mem arrayBuffer  = clCreateBuffer(params->context, CL_MEM_READ_ONLY,  size, nullptr, &result);
     cl_mem resultBuffer = clCreateBuffer(params->context, CL_MEM_READ_WRITE, size, nullptr, &result);
 
     cl_mem sizeBuffer = clCreateBuffer(params->context, CL_MEM_READ_ONLY, sizeof(size_t), nullptr, &result);
@@ -76,11 +85,14 @@ int main() {
     result = clEnqueueReadBuffer(params->commandQueue, resultBuffer, CL_TRUE, 0, size, result_array, 0, nullptr,
                                  nullptr);
 
-    printf("Time: %f seconds.\n", time / 1e9);
-    printf("GFLOPS: %f.\n", cnt / time);
+    if (check(result_array, array, cnt)) {
+        printf("Time: %f seconds.\n", time / 1e9);
+        printf("GFLOPS: %f.\n", cnt / time);
+    } else {
+        print_array("array", array, cnt);
+        print_array("result", result_array, cnt);
+    }
 
-    print_array("array", array, n);
-    print_array("result", result_array, n);
     clear_matrix(array);
     clear_matrix(result_array);
     return EXIT_SUCCESS;
