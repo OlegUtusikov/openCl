@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.1)
-project(OpenCL)
+project(PrefSumCL)
 
-set(SRC main.cpp)
+set(SRC main.cpp ../utils.h)
 
 add_executable(${PROJECT_NAME} ${SRC})
 
