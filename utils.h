@@ -1,6 +1,7 @@
 #pragma once
 #include <CL/opencl.h>
 #include <memory>
+#include <vector>
 
 struct Environment {
     Environment() = default;
@@ -9,7 +10,7 @@ struct Environment {
         if (context != nullptr)      free(context);
         if (commandQueue != nullptr) free(commandQueue);
         if (program != nullptr)      free(program);
-        if (kernel != nullptr)       free(kernel);
+        if (kernels != nullptr)      free(kernels);
     }
 
     cl_uint             devicesCount        { 0 };
@@ -18,11 +19,12 @@ struct Environment {
     cl_device_id        device              { nullptr };
     cl_command_queue    commandQueue        { nullptr };
     cl_program          program             { nullptr };
-    cl_kernel           kernel              { nullptr };
-    size_t              local_work_size     { 1 };
-    size_t              elements_one_thread { 1 };
-    size_t              max_local_size_mem  { 2048 };
-    cl_queue_properties queue_props         { CL_QUEUE_PROFILING_ENABLE };
+    cl_kernel*          kernels             { nullptr };
+    size_t              kernelsCount        { 0 };
+    size_t              localWorkSize       { 1 };
+    size_t              elementsOneThread   { 1 };
+    size_t              maxLocalSizeMem     { 2048 };
+    cl_queue_properties queueProps          { CL_QUEUE_PROFILING_ENABLE };
 };
 
 void init(const std::shared_ptr<Environment> &params) {
@@ -86,7 +88,7 @@ void create_context(const std::shared_ptr<Environment> &params) {
         printf("Can't create context! Error code: %d\n", result);
         return;
     }
-    params->commandQueue = clCreateCommandQueue(params->context, params->devices[0], params->queue_props, &result);
+    params->commandQueue = clCreateCommandQueue(params->context, params->devices[0], params->queueProps, &result);
     if (result == CL_SUCCESS && params->commandQueue != nullptr) {
         params->device = params->devices[0];
         printf("Command queue created!\n");

@@ -62,11 +62,11 @@ int main() {
     size_t B = 512;
     size_t C = 1024;
     std::shared_ptr<Environment> params(new Environment());
-    params->elements_one_thread = 16;
-    params->local_work_size = get_nearest_up(32, params->elements_one_thread);
-    size_t firstShape  = get_nearest_up(A, params->local_work_size);
-    size_t secondShape = get_nearest_up(B, params->local_work_size);
-    size_t thirdShape  = get_nearest_up(C, params->local_work_size);
+    params->elementsOneThread = 16;
+    params->localWorkSize = get_nearest_up(32, params->elementsOneThread);
+    size_t firstShape  = get_nearest_up(A, params->localWorkSize);
+    size_t secondShape = get_nearest_up(B, params->localWorkSize);
+    size_t thirdShape  = get_nearest_up(C, params->localWorkSize);
 
     auto* firstMatrix   = alloc_array<float>(firstShape  * secondShape);
     auto* secondMatrix  = alloc_array<float>(secondShape * thirdShape);
@@ -80,10 +80,11 @@ int main() {
     init(params);
     create_context(params);
     read_and_build("function_matrix.cl", params,
-            "-D LOCAL_GROUP_SIZE=" + std::to_string(params->local_work_size) +
-                   " -D ELEMENTS=" + std::to_string(params->elements_one_thread));
+            "-D LOCAL_GROUP_SIZE=" + std::to_string(params->localWorkSize) +
+                   " -D ELEMENTS=" + std::to_string(params->elementsOneThread));
 
-    params->kernel = clCreateKernel(params->program, "matrix_mul", nullptr);
+    params->kernels = static_cast<cl_kernel*>(malloc(sizeof(cl_kernel)));
+    params->kernels[0] = clCreateKernel(params->program, "matrix_mul", nullptr);
 
     // set arguments
     cl_int result;
@@ -107,20 +108,20 @@ int main() {
     clEnqueueWriteBuffer(params->commandQueue, thirdSizeBuffer, CL_TRUE, 0, sizeof(size_t), &thirdShape, 0, nullptr,
                          nullptr);
 
-    clSetKernelArg(params->kernel, 0, sizeof(cl_mem), &firstBuffer);
-    clSetKernelArg(params->kernel, 1, sizeof(cl_mem), &secondBuffer);
-    clSetKernelArg(params->kernel, 2, sizeof(cl_mem), &resultBuffer);
-    clSetKernelArg(params->kernel, 3, sizeof(cl_mem), &firstSizeBuffer);
-    clSetKernelArg(params->kernel, 4, sizeof(cl_mem), &secondSizeBuffer);
-    clSetKernelArg(params->kernel, 5, sizeof(cl_mem), &thirdSizeBuffer);
+    clSetKernelArg(params->kernels[0], 0, sizeof(cl_mem), &firstBuffer);
+    clSetKernelArg(params->kernels[0], 1, sizeof(cl_mem), &secondBuffer);
+    clSetKernelArg(params->kernels[0], 2, sizeof(cl_mem), &resultBuffer);
+    clSetKernelArg(params->kernels[0], 3, sizeof(cl_mem), &firstSizeBuffer);
+    clSetKernelArg(params->kernels[0], 4, sizeof(cl_mem), &secondSizeBuffer);
+    clSetKernelArg(params->kernels[0], 5, sizeof(cl_mem), &thirdSizeBuffer);
 
     // execution
     constexpr size_t workDims = 2;
-    size_t globalWorkSize[workDims] = { firstShape, thirdShape / params->elements_one_thread };
-    size_t localWorkSize[workDims] =  { params->local_work_size, params->local_work_size / params->elements_one_thread };
+    size_t globalWorkSize[workDims] = { firstShape, thirdShape / params->elementsOneThread };
+    size_t localWorkSize[workDims] =  { params->localWorkSize, params->localWorkSize / params->elementsOneThread };
 
     cl_event event;
-    result = clEnqueueNDRangeKernel(params->commandQueue, params->kernel, workDims, nullptr, globalWorkSize,
+    result = clEnqueueNDRangeKernel(params->commandQueue, params->kernels[0], workDims, nullptr, globalWorkSize,
                                     localWorkSize, 0, nullptr, &event);
 
     clWaitForEvents(1, &event);
