@@ -1,7 +1,7 @@
 # GPU parallel programming course(openMP and openCL)
 #### Student: Utusikov Oleg, M3336.
 
-##Tasks:
+## Tasks:
 - Matrix product.
 - Count inclusive prefix sums.
 
