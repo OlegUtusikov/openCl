@@ -71,10 +71,10 @@ void printMatrix(const char* name, const float* matrix, size_t shapeX, size_t sh
 int main(int argc, char** argv) {
     srand(time(nullptr));
     omp_set_num_threads(8);
-    size_t shapeX1 = 4000;
-    size_t shapeY1 = 1000;
-    size_t shapeX2 = 1000;
-    size_t shapeY2 = 3000;
+    size_t shapeX1 = 1000;
+    size_t shapeY1 = 500;
+    size_t shapeX2 = 500;
+    size_t shapeY2 = 1000;
 
     if (shapeY1 != shapeX2) {
         printf("Incorrect dims. shapeY1: %zu, shapeX2: %zu", shapeY1, shapeX2);

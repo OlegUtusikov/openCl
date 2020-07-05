@@ -4,7 +4,6 @@ project(ParallelProgramming)
 add_subdirectory(MatrixCL)
 add_subdirectory(OpenMP)
 add_subdirectory(PrefSumCL)
-file(REMOVE ${CMAKE_CURRENT_BINARY_DIR}/OpenCL/function.txt)
 file(COPY function_matrix.cl
         DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/MatrixCL)
 file(COPY function_pref_sum.cl
