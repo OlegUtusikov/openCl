@@ -139,9 +139,9 @@ int main() {
         printf("Time: %f seconds.\n", time / 1e9);
         printf("GFLOPS: %f.\n", 2.0 * firstShape * thirdShape * secondShape / time);
     }
-    clear_matrix(firstMatrix);
-    clear_matrix(secondMatrix);
-    clear_matrix(secondMatrixT);
-    clear_matrix(resultMatrix);
+    clear_array(firstMatrix);
+    clear_array(secondMatrix);
+    clear_array(secondMatrixT);
+    clear_array(resultMatrix);
     return EXIT_SUCCESS;
 }

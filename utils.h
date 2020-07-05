@@ -20,10 +20,8 @@ struct Environment {
     cl_command_queue    commandQueue        { nullptr };
     cl_program          program             { nullptr };
     cl_kernel*          kernels             { nullptr };
-    size_t              kernelsCount        { 0 };
     size_t              localWorkSize       { 1 };
     size_t              elementsOneThread   { 1 };
-    size_t              maxLocalSizeMem     { 2048 };
     cl_queue_properties queueProps          { CL_QUEUE_PROFILING_ENABLE };
 };
 
@@ -142,6 +140,6 @@ T* alloc_array(size_t size) {
 }
 
 template<typename T>
-void clear_matrix(T* matrix) {
+void clear_array(T* matrix) {
     free(matrix);
 }
