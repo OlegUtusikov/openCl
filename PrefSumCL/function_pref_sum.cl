@@ -16,11 +16,10 @@ kernel void tiles_pref_sums(global const float* elements, global float* res, glo
 }
 
 kernel void add_sums(global const float* sums, global float* res, global const size_t* size) {
-    size_t group = get_group_id(0);
     size_t id = get_global_id(0);
     float add = 0.0;
-    for (size_t i = 1; i <= group; ++i) {
-        add += sums[i * LOCAL_GROUP_SIZE - 1];
+    for (size_t i = LOCAL_GROUP_SIZE - 1; i < id; i += LOCAL_GROUP_SIZE) {
+        add += sums[i];
     }
     res[id] = sums[id] + add;
 }

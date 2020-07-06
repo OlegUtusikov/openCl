@@ -83,7 +83,8 @@ int main() {
             "-D LOCAL_GROUP_SIZE=" + std::to_string(params->localWorkSize) +
                    " -D ELEMENTS=" + std::to_string(params->elementsOneThread));
 
-    params->kernels = static_cast<cl_kernel*>(malloc(sizeof(cl_kernel)));
+    params->kernelsCount  = 1;
+    params->kernels = static_cast<cl_kernel*>(malloc(sizeof(cl_kernel) * params->kernelsCount));
     params->kernels[0] = clCreateKernel(params->program, "matrix_mul", nullptr);
 
     // set arguments

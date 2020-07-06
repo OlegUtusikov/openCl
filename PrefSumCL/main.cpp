@@ -45,7 +45,8 @@ int main() {
             "-D LOCAL_GROUP_SIZE=" + std::to_string(params->localWorkSize) +
                   " -D ELEMENTS=" + std::to_string(params->elementsOneThread));
 
-    params->kernels = static_cast<cl_kernel*>(malloc(sizeof(cl_kernel) * 2));
+    params->kernelsCount = 2;
+    params->kernels = static_cast<cl_kernel*>(malloc(sizeof(cl_kernel) * params->kernelsCount));
     params->kernels[0] = clCreateKernel(params->program, "tiles_pref_sums", nullptr);
 
     size_t size = cnt * sizeof(float);
@@ -79,25 +80,17 @@ int main() {
     size_t globalWorkSize[workDims] = { cnt };
     size_t localWorkSize[workDims]  = { params->localWorkSize };
 
-    result = clEnqueueNDRangeKernel(params->commandQueue, params->kernels[0], workDims, nullptr, globalWorkSize,
-                                    localWorkSize, 0, nullptr, &event);
+    for (size_t i = 0; i < params->kernelsCount; ++i) {
+        result = clEnqueueNDRangeKernel(params->commandQueue, params->kernels[i], workDims, nullptr, globalWorkSize,
+                                        localWorkSize, 0, nullptr, &event);
 
-    clWaitForEvents(1, &event);
-    clFinish(params->commandQueue);
+        clWaitForEvents(1, &event);
+        clFinish(params->commandQueue);
 
-    clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_START, sizeof(time_start), &time_start, nullptr);
-    clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END, sizeof(time_end), &time_end, nullptr);
-    time += time_end - time_start;
-
-    result = clEnqueueNDRangeKernel(params->commandQueue, params->kernels[1], workDims, nullptr, globalWorkSize,
-                                    localWorkSize, 0, nullptr, &event);
-
-    clWaitForEvents(1, &event);
-    clFinish(params->commandQueue);
-
-    clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_START, sizeof(time_start), &time_start, nullptr);
-    clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END, sizeof(time_end), &time_end, nullptr);
-    time += time_end - time_start;
+        clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_START, sizeof(time_start), &time_start, nullptr);
+        clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END, sizeof(time_end), &time_end, nullptr);
+        time += time_end - time_start;
+    }
 
     result = clEnqueueReadBuffer(params->commandQueue, resultBuffer, CL_TRUE, 0, size, result_array, 0, nullptr,
                                  nullptr);
